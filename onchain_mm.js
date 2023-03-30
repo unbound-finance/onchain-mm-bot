@@ -209,8 +209,11 @@ class LiquidityHandler {
 
 var liquidityHandler = new LiquidityHandler();
 
-run()
+// run every 30 seconds
+setInterval(run, 30000);
+
 async function run() {
+    console.log("Bot started...")
 
     try {
 
@@ -269,12 +272,13 @@ async function run() {
                 amount1: amount1 // WBNB
             };
             newTicks.push(newTick);
-        }
+        } 
 
-        console.log({partialTicks})
-        console.log({newTicks})
-
+        
         if(newTicks.length > 0 || partialTicks.length > 0){
+            // console.log({partialTicks})
+            // console.log({newTicks})
+            
             // execute rebalance transaction
             let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, [], newTicks);
             let log = {
@@ -284,6 +288,8 @@ async function run() {
             };
             console.log(log);
             fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
+        } else {
+            console.log("Nothing to do...")
         }
 
     } catch(e){
