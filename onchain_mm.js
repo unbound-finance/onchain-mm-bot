@@ -290,7 +290,7 @@ async function run() {
             console.log(log);
             fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
         } else {
-            console.log("Nothing to do...")
+            // console.log("Nothing to do...")
         }
 
     } catch(e){
