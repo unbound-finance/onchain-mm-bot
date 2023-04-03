@@ -27,16 +27,7 @@ const LIQ = 10; // liquidity at the price below
 const BASE_SQRT_PRICE = (207670616831749341164212298.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
 
 // configuration of strategy ranges (will need to be queried at the start, if ranges are set)
-// var ranges = null;
-var ranges = {
-    current_ranges: [
-        [ -119200, -119000, LIQ * LOWER_THETA ],
-        [ -119000, -118800, LIQ ],
-        [ -118800, -118600, LIQ * UPPER_THETA ]
-      ],
-      lower_trigger: -119159,
-      upper_trigger: -118641
-}
+var ranges = null;
 
 var web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
 
@@ -207,12 +198,46 @@ class LiquidityHandler {
             }
         }
     }
+
+    init_ranges(current_ranges) {
+        current_ranges.sort(function (a, b) { return a[0] - b[0]; });
+        console.log(current_ranges);
+        if (
+            current_ranges[1][0] - current_ranges[0][0] != this.S || current_ranges[2][0] - current_ranges[1][0] != this.S
+            || current_ranges[1][0] != current_ranges[0][1] || current_ranges[2][0] != current_ranges[1][1] || current_ranges.length != 3
+        ) {
+            throw "failed to verify current ranges";
+        }
+​
+        ranges.current_ranges = [];
+        let diff = Math.round(current_ranges[0][0] / this.S) - this._base_tick;
+        let liq;
+        if (diff >= 0) { liq = LIQ * (UPPER_THETA ** diff); }
+        else { liq = liq = LIQ * (LOWER_THETA ** -diff); }
+        for (let r of current_ranges) {
+            ranges.current_ranges.push([r[0], r[1], liq]);
+            liq *= UPPER_THETA;
+        }
+        ranges.lower_trigger = Math.ceil(current_ranges[0][0] + LOWER_TRIG * this.S);
+        ranges.upper_trigger = Math.floor(current_ranges[2][1] - UPPER_TRIG * this.S);
+    }
 }
 
 var liquidityHandler = new LiquidityHandler();
 
-// run every 30 seconds
-setInterval(run, 30000);
+init();
+
+function init(){
+    
+    liquidityHandler.init_ranges([
+        [-119800, -119600],
+        [-120200, -120000],
+        [-120000, -119800]
+    ]);
+
+    // run every 30 seconds
+    setInterval(run, 30000);
+}
 
 async function run() {
 
