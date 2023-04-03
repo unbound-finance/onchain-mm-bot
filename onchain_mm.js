@@ -4,6 +4,8 @@ const CONFIG = require("./config/config")
 require('dotenv').config()
 var fs = require("fs");
 const web3Lib = require('./utils/web3');
+var bn = require('bignumber.js')
+
 // uniswapv3 pool address
 const UNISWAP_POOL_ADDRESS = "0x508acf810857fefa86281499068ad5d19ebce325";
 
@@ -267,8 +269,8 @@ async function run() {
             let newTick = {
                 tickLower: range_this[0],
                 tickUpper: range_this[1],
-                amount0: amount0, // UNB,
-                amount1: amount1 // WBNB
+                amount0: new bn(amount0).multipliedBy("1000000000000000000").toFixed(0), // UNB,
+                amount1: new bn(amount1).multipliedBy("1000000000000000000").toFixed(0) // WBNB
             };
             newTicks.push(newTick);
         } 
