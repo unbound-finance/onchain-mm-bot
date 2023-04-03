@@ -27,7 +27,16 @@ const LIQ = 10; // liquidity at the price below
 const BASE_SQRT_PRICE = (207670616831749341164212298.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
 
 // configuration of strategy ranges (will need to be queried at the start, if ranges are set)
-var ranges = null;
+// var ranges = null;
+var ranges = {
+    current_ranges: [
+        [-119200, -119000, LIQ * LOWER_THETA],
+        [-119000, -118800, LIQ],
+        [-118800, -118600, LIQ * UPPER_THETA]
+    ],
+    lower_trigger: -119159,
+    upper_trigger: -118641
+};
 
 var web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
 
@@ -208,7 +217,7 @@ class LiquidityHandler {
         ) {
             throw "failed to verify current ranges";
         }
-​
+
         ranges.current_ranges = [];
         let diff = Math.round(current_ranges[0][0] / this.S) - this._base_tick;
         let liq;
