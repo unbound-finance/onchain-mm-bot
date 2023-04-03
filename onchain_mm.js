@@ -213,7 +213,6 @@ var liquidityHandler = new LiquidityHandler();
 setInterval(run, 30000);
 
 async function run() {
-    console.log("Bot started...")
 
     try {
 
@@ -260,7 +259,7 @@ async function run() {
             range_this = ranges.actions.add[i];
             liquidity = Math.floor(range_this[2])
             let amount0 = null, amount1 = null;
-            let amounts = liquidityHandler.get_amt_for_range(r, sqrtP);
+            let amounts = liquidityHandler.get_amt_for_range(range_this, sqrtP);
 
             amount0 = amounts.amount0;
             amount1 = amounts.amount1;
