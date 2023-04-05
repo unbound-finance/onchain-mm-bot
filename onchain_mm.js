@@ -21,22 +21,18 @@ const DEC_DELTA = 0; // this is directional if x is gov token then standard else
 const SPACING_MULT = 1; // width of liquidity is SPACING * SPACING_MULT
 const LOWER_TRIG = 0.2; // trigger rebalance when 80% of liquidity is eaten
 const UPPER_TRIG = 0.2;
-const UPPER_THETA = 1 / .99; // liquidity increases by 10% to the right
+const UPPER_THETA = 1.05; // liquidity increases by 10% to the right
 const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
-const LIQ = 10; // liquidity at the price below 
-const BASE_SQRT_PRICE = (207670616831749341164212298.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
+const LIQ = 12330; // liquidity at the price below 
+const BASE_SQRT_PRICE = (212577593084727164410612830.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
 
 // configuration of strategy ranges (will need to be queried at the start, if ranges are set)
-// var ranges = null;
-var ranges = {
-    current_ranges: [
-        [-119200, -119000, LIQ * LOWER_THETA],
-        [-119000, -118800, LIQ],
-        [-118800, -118600, LIQ * UPPER_THETA]
-    ],
-    lower_trigger: -119159,
-    upper_trigger: -118641
-};
+var ranges = null;
+// var ranges = {
+//     current_ranges: [],
+//     lower_trigger: 0,
+//     upper_trigger: 0
+// };
 
 var web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
 
@@ -238,11 +234,11 @@ init();
 
 function init(){
     
-    liquidityHandler.init_ranges([
-        [-117800, -117600],
-        [-117600, -117400],
-        [-117400, -117200]
-    ]);
+    // liquidityHandler.init_ranges([
+    //     [-117800, -117600],
+    //     [-117600, -117400],
+    //     [-117400, -117200]
+    // ]);
 
     // run every 30 seconds
     setInterval(run, 30000);
