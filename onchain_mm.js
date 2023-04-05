@@ -239,9 +239,9 @@ init();
 function init(){
     
     liquidityHandler.init_ranges([
-        [-119800, -119600],
-        [-120200, -120000],
-        [-120000, -119800]
+        [-117800, -117600],
+        [-117600, -117400],
+        [-117400, -117200]
     ]);
 
     // run every 30 seconds
@@ -315,7 +315,7 @@ async function run() {
             // console.log({newTicks})
             
             // execute rebalance transaction
-            let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, [], newTicks);
+            let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks);
             let log = {
                 "removedRanges": JSON.stringify(ranges.actions.remove),
                 "addedRanges": JSON.stringify(ranges.actions.add),
