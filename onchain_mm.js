@@ -24,7 +24,7 @@ const UPPER_TRIG = 0.2;
 const UPPER_THETA = 1.05; // liquidity increases by 10% to the right
 const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
 const LIQ = 12330; // liquidity at the price below 
-const BASE_SQRT_PRICE = (212577593084727164410612830.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
+const BASE_SQRT_PRICE = (228729065390707027563205453.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
 
 // configuration of strategy ranges (will need to be queried at the start, if ranges are set)
 var ranges = null;
