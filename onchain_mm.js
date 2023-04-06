@@ -275,6 +275,9 @@ async function run() {
             liquidity = Math.floor(range_this[2]);
 
             let indexInStrategyTicks = strategyTicks.findIndex( (x) => parseInt(x.tickLower) == parseInt(range_this[0]) && parseInt(x.tickUpper) == parseInt(range_this[1]))
+            if(indexInStrategyTicks < 0) {
+                continue;
+            }
             console.log({indexInStrategyTicks})
             console.log("Remove liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity);
             let pTick = {
@@ -285,6 +288,9 @@ async function run() {
             }
             partialTicks.push(pTick);
         }
+
+        // sort array in decending way
+        partialTicks.sort((a, b) => b.index - a.index);
 
         // loop over actions.add and add liquidity
         for (i = 0; i < ranges.actions.add.length; i++) {
