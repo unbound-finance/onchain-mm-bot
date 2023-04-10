@@ -59,7 +59,7 @@ class LiquidityHandler {
     }
 
     // Add a range on the left and remove the range on the right
-    move_lower() {
+    move_lower(ranges) {
         let lower_tick = Math.floor((ranges.current_ranges[0][0] + ranges.current_ranges[0][1]) / 2.0 / this.S);
         var liq = ranges.current_ranges[0][2];
 
@@ -73,9 +73,10 @@ class LiquidityHandler {
         ranges.lower_trigger = Math.ceil((lower_tick - 1 + LOWER_TRIG) * this.S);
         ranges.upper_trigger = Math.floor((lower_tick + 2 - UPPER_TRIG) * this.S);
         ranges.actions = { add: [add_range], remove: [remove_range] };
+        return ranges;
     }
 
-    move_higher() {
+    move_higher(ranges) {
         let upper_tick = Math.floor((ranges.current_ranges[2][0] + ranges.current_ranges[2][1]) / 2.0 / this.S);
         var liq = ranges.current_ranges[2][2];
 
@@ -89,6 +90,7 @@ class LiquidityHandler {
         ranges.lower_trigger = Math.ceil((upper_tick - 1 + LOWER_TRIG) * this.S);
         ranges.upper_trigger = Math.floor((upper_tick + 2 - UPPER_TRIG) * this.S);
         ranges.actions = { add: [add_range], remove: [remove_range] };
+        return ranges;
     }
 
     lower_liqudity_to_amt(range, sqrtP) {
@@ -137,8 +139,9 @@ class LiquidityHandler {
     //ranges.actions.add & ranges.actions.remove are lists of lists that tell you the current actions
     //each element is in the form [lower_tick, upper_tick, liquidity] (L value)
     //ultimately the run() function should loop over these (can disregard other stuff)
-    set_liquidity_config_at_sqrtP(sqrtP) {
-        if (ranges == null) {
+    set_liquidity_config_at_sqrtP(sqrtP, old_ranges) {
+        new_ranges = JSON.parse(JSON.stringify(old_ranges));
+        if (old_ranges == null) {
             // if no ranges are set, set them around the current range
             var current_tick = this.get_tick_from_sqrtP(sqrtP);
             let diff = current_tick - this._base_tick;
@@ -152,7 +155,7 @@ class LiquidityHandler {
                 [(current_tick + 1) * this.S, (current_tick + 2) * this.S, liq * UPPER_THETA]
             ];
 
-            ranges = {
+            new_ranges = {
                 current_ranges: new_ranges,
                 lower_trigger: Math.ceil((current_tick - 1 + LOWER_TRIG) * this.S),
                 upper_trigger: Math.floor((current_tick + 2 - UPPER_TRIG) * this.S),
@@ -168,40 +171,41 @@ class LiquidityHandler {
             let pool_tick = this.get_tick_from_sqrtP_pool(sqrtP);
 
             //if no rebalance required, change nothing
-            if (pool_tick > ranges.lower_trigger && pool_tick < ranges.upper_trigger) { ranges.actions = { add: [], remove: [] }; }
+            if (pool_tick > old_ranges.lower_trigger && pool_tick < old_ranges.upper_trigger) { new_ranges.actions = { add: [], remove: [] }; }
             //rebalance on the lower side, add range to the left and remove from right
-            else if (pool_tick <= ranges.lower_trigger) {
+            else if (pool_tick <= old_ranges.lower_trigger) {
                 var adds = [], removes = [];
 
                 //while this is true, move ranges lower, keeping track of adds and removes
                 // at each move
-                while (pool_tick <= ranges.lower_trigger) {
-                    this.move_lower();
-                    adds = adds.concat(ranges.actions.add);
-                    removes = removes.concat(ranges.actions.remove);
+                while (pool_tick <= new_ranges.lower_trigger) {
+                    new_ranges = this.move_lower(new_ranges);
+                    adds = adds.concat(new_ranges.actions.add);
+                    removes = removes.concat(new_ranges.actions.remove);
                 }
                 //set adds and removes (at most 3 elements)
-                ranges.actions.add = adds.slice(-3);
-                ranges.actions.remove = removes.slice(0, 3);
-                ranges.actions.event = "lower_trigger";
+                new_ranges.actions.add = adds.slice(-3);
+                new_ranges.actions.remove = removes.slice(0, 3);
+                new_ranges.actions.event = "lower_trigger";
 
             } else {
                 // rebalance on the upper side, Add range to the right and remove from the left
                 var adds = [], removes = [];
 
                 //while this is true, move ranges higher, keeping track of adds and removes
-                while (pool_tick >= ranges.upper_trigger) {
-                    this.move_higher();
-                    adds = adds.concat(ranges.actions.add);
-                    removes = removes.concat(ranges.actions.remove);
+                while (pool_tick >= new_ranges.upper_trigger) {
+                    new_ranges = this.move_higher(new_ranges);
+                    adds = adds.concat(new_ranges.actions.add);
+                    removes = removes.concat(new_ranges.actions.remove);
                 }
 
                 //set adds and removes (at most 3 elements)
-                ranges.actions.add = adds.slice(-3);
-                ranges.actions.remove = removes.slice(0, 3);
-                ranges.actions.event = "upper_trigger";
+                new_ranges.actions.add = adds.slice(-3);
+                new_ranges.actions.remove = removes.slice(0, 3);
+                new_ranges.actions.event = "upper_trigger";
             }
         }
+        return new_ranges;
     }
 
     init_ranges(current_ranges) {
@@ -213,7 +217,7 @@ class LiquidityHandler {
         ) {
             throw "failed to verify current ranges";
         }
-
+        var ranges = {}
         ranges.current_ranges = [];
         let diff = Math.round(current_ranges[0][0] / this.S) - this._base_tick;
         let liq;
@@ -225,6 +229,7 @@ class LiquidityHandler {
         }
         ranges.lower_trigger = Math.ceil(current_ranges[0][0] + LOWER_TRIG * this.S);
         ranges.upper_trigger = Math.floor(current_ranges[2][1] - UPPER_TRIG * this.S);
+        return ranges
     }
 }
 
@@ -234,7 +239,7 @@ init();
 
 function init(){
     
-    // liquidityHandler.init_ranges([
+    // ranges = liquidityHandler.init_ranges([
     //     [-117800, -117600],
     //     [-117600, -117400],
     //     [-117400, -117200]
@@ -254,8 +259,8 @@ async function run() {
         // var sqrtP = BASE_SQRT_PRICE / 1.0001 ** (290);
         // console.log(sqrtP)
 
-        liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP);
-        // console.log(ranges)
+        var new_ranges = liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP, ranges);
+        // console.log(new_ranges, ranges)
 
         var partialTicks = new Array();
         var newTicks = new Array();
@@ -270,8 +275,8 @@ async function run() {
         // ranges.actions.remove[1] = ['-118800', '-118600']
 
         // loop over actions.remove and remove liquidity
-        for (i = 0; i < ranges.actions.remove.length; i++) {
-            range_this = ranges.actions.remove[i];
+        for (i = 0; i < new_ranges.actions.remove.length; i++) {
+            range_this = new_ranges.actions.remove[i];
             liquidity = Math.floor(range_this[2]);
 
             let indexInStrategyTicks = strategyTicks.findIndex( (x) => parseInt(x.tickLower) == parseInt(range_this[0]) && parseInt(x.tickUpper) == parseInt(range_this[1]))
@@ -293,8 +298,8 @@ async function run() {
         partialTicks.sort((a, b) => b.index - a.index);
 
         // loop over actions.add and add liquidity
-        for (i = 0; i < ranges.actions.add.length; i++) {
-            range_this = ranges.actions.add[i];
+        for (i = 0; i < new_ranges.actions.add.length; i++) {
+            range_this = new_ranges.actions.add[i];
             liquidity = Math.floor(range_this[2])
             let amount0 = null, amount1 = null;
             let amounts = liquidityHandler.get_amt_for_range(range_this, sqrtP);
@@ -317,14 +322,17 @@ async function run() {
             // console.log({newTicks})
             
             // execute rebalance transaction
-            let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks);
-            let log = {
-                "removedRanges": JSON.stringify(ranges.actions.remove),
-                "addedRanges": JSON.stringify(ranges.actions.add),
-                "rebalanceTx": rebalanceTx
-            };
-            console.log(log);
-            fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
+            await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks).then(
+                (rebalanceTx) => {
+                    ranges = new_ranges;
+                    let log = {
+                        "removedRanges": JSON.stringify(ranges.actions.remove),
+                        "addedRanges": JSON.stringify(ranges.actions.add),
+                        "rebalanceTx": rebalanceTx
+                    };
+                    console.log(log);
+                    fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
+            });
         } else {
             // console.log("Nothing to do...")
         }
