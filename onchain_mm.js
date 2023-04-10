@@ -237,13 +237,14 @@ var liquidityHandler = new LiquidityHandler();
 
 init();
 
-function init(){
+async function init(){
     
-    // ranges = liquidityHandler.init_ranges([
-    //     [-117800, -117600],
-    //     [-117600, -117400],
-    //     [-117400, -117200]
-    // ]);
+    var strategyTicks = await defiedgeStrategyInstance.methods.getTicks().call();
+
+    if(strategyTicks.length > 0){
+        strategyTicks = strategyTicks.map(ticks => [Number(ticks.tickLower), Number(ticks.tickUpper) ]);
+        ranges = liquidityHandler.init_ranges(strategyTicks);
+    }
 
     // run every 30 seconds
     setInterval(run, 30000);
