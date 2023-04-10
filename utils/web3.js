@@ -90,7 +90,7 @@ exports.rebalance = async(web3, strategyContractInstance, chainId, partialTicks,
 exports.waitForConfirmation = async (web3, txHash) => {
     return new Promise(function(resolve, reject){
         let txCheck = setInterval(()=>{
-            console.log('txcheck====')
+            // console.log('txcheck====')
             web3.eth.getTransactionReceipt(txHash, function(err, response){
                 if(!err){
                     console.log(response ? "true" : "false")

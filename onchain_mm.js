@@ -322,17 +322,24 @@ async function run() {
             // console.log({newTicks})
             
             // execute rebalance transaction
-            await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks).then(
-                (rebalanceTx) => {
-                    ranges = new_ranges;
-                    let log = {
-                        "removedRanges": JSON.stringify(ranges.actions.remove),
-                        "addedRanges": JSON.stringify(ranges.actions.add),
-                        "rebalanceTx": rebalanceTx
-                    };
-                    console.log(log);
-                    fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
-            });
+            let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks)
+            
+            let txStatus = await web3Lib.waitForConfirmation(rebalanceTx);
+
+            // if transaction succeed then set new ranges and save logs
+            if(txStatus){
+                ranges = new_ranges;
+                let log = {
+                    "removedRanges": JSON.stringify(ranges.actions.remove),
+                    "addedRanges": JSON.stringify(ranges.actions.add),
+                    "rebalanceTx": rebalanceTx
+                };
+                console.log(log);
+                fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
+            } else {
+                fs.appendFile('./logs/dexerrors.txt', Date.now() + " - tx failed: " + rebalanceTx + ",\n", (err) => { });
+            }
+
         } else {
             // console.log("Nothing to do...")
         }
