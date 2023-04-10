@@ -325,7 +325,7 @@ async function run() {
             // execute rebalance transaction
             let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks)
             
-            let txStatus = await web3Lib.waitForConfirmation(rebalanceTx);
+            let txStatus = await web3Lib.waitForConfirmation(web3, rebalanceTx);
 
             // if transaction succeed then set new ranges and save logs
             if(txStatus){
