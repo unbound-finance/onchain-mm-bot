@@ -22,9 +22,12 @@ const SPACING_MULT = 1; // width of liquidity is SPACING * SPACING_MULT
 const LOWER_TRIG = 0.2; // trigger rebalance when 80% of liquidity is eaten
 const UPPER_TRIG = 0.2;
 const UPPER_THETA = 1.05; // liquidity increases by 10% to the right
-const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
-const LIQ = 12330; // liquidity at the price below 
-const BASE_SQRT_PRICE = (212577593084727164410612830.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
+// const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
+const LOWER_THETA = 0.9
+const LIQ = 33852; // liquidity at the price below 
+const BASE_SQRT_PRICE = (181456988882692797038668774.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
+const MIN_SUPPORTED_SQRT_PRICE = Math.sqrt(0.002 / 320); // min supported price (can be > current_price, in which can only upward moves supported until this level is reached)
+const MAX_SUPPORTED_SQRT_PRICE = Math.sqrt(0.003 / 320); // see above
 
 // configuration of strategy ranges (will need to be queried at the start, if ranges are set)
 var ranges = null;
@@ -46,6 +49,8 @@ class LiquidityHandler {
         this.O = DEC_DELTA / Math.log10(1.0001);
         this._base_tick = this.get_tick_from_sqrtP(BASE_SQRT_PRICE);
         this.base_delta = 1.0001 ** (this.S / 2) - 1.0;
+        this.min_supported_tick = (MIN_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(MIN_SUPPORTED_SQRT_PRICE);
+        this.max_supported_tick = (MAX_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(MAX_SUPPORTED_SQRT_PRICE);
     }
 
     // get strategy tick from price
@@ -173,12 +178,12 @@ class LiquidityHandler {
             //if no rebalance required, change nothing
             if (pool_tick > old_ranges.lower_trigger && pool_tick < old_ranges.upper_trigger) { new_ranges.actions = { add: [], remove: [] }; }
             //rebalance on the lower side, add range to the left and remove from right
-            else if (pool_tick <= old_ranges.lower_trigger) {
+            else if (pool_tick <= old_ranges.lower_trigger && old_ranges.current_ranges[0][0] > this.min_supported_tick) {
                 var adds = [], removes = [];
 
                 //while this is true, move ranges lower, keeping track of adds and removes
                 // at each move
-                while (pool_tick <= new_ranges.lower_trigger) {
+                while (pool_tick <= new_ranges.lower_trigger && new_ranges.current_ranges[0][0] > this.min_supported_tick) {
                     new_ranges = this.move_lower(new_ranges);
                     adds = adds.concat(new_ranges.actions.add);
                     removes = removes.concat(new_ranges.actions.remove);
@@ -188,12 +193,12 @@ class LiquidityHandler {
                 new_ranges.actions.remove = removes.slice(0, 3);
                 new_ranges.actions.event = "lower_trigger";
 
-            } else {
+            } else if (pool_tick >= old_ranges.upper_trigger && old_ranges.current_ranges[2][1] < this.max_supported_tick){
                 // rebalance on the upper side, Add range to the right and remove from the left
                 var adds = [], removes = [];
 
                 //while this is true, move ranges higher, keeping track of adds and removes
-                while (pool_tick >= new_ranges.upper_trigger) {
+                while (pool_tick >= new_ranges.upper_trigger && new_ranges.current_ranges[2][1] < this.max_supported_tick) {
                     new_ranges = this.move_higher(new_ranges);
                     adds = adds.concat(new_ranges.actions.add);
                     removes = removes.concat(new_ranges.actions.remove);
@@ -208,6 +213,8 @@ class LiquidityHandler {
         return new_ranges;
     }
 
+    // IF LOWER_THETA * UPPER_THETA != 1.0 then the liquidity values might be approximate...
+    // Should not create any issues, but will perform a memoryless reset of liquidity values
     init_ranges(current_ranges) {
         current_ranges.sort(function (a, b) { return a[0] - b[0]; });
         console.log(current_ranges);
@@ -333,7 +340,8 @@ async function run() {
                 let log = {
                     "removedRanges": JSON.stringify(ranges.actions.remove),
                     "addedRanges": JSON.stringify(ranges.actions.add),
-                    "rebalanceTx": rebalanceTx
+                    "rebalanceTx": rebalanceTx,
+                    "currentRanges": JSON.stringify(ranges.current_ranges),
                 };
                 console.log(log);
                 fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
@@ -347,7 +355,10 @@ async function run() {
 
     } catch(e){
         console.log("error while initialization", e.toString());
-        fs.appendFile('./logs/dexerrors.txt', Date.now() + " - error while initialization: " + e.toString() + ",\n", (err) => { });
+        let info_str;
+        try {info_str = JSON.stringify(ranges.current_ranges);}
+        catch {info_str = ""}
+        fs.appendFile('./logs/dexerrors.txt', Date.now() + " - error while initialization: " + e.toString() + ",\n" + info_str + "\n", (err) => { });
     }
 
 }
