@@ -175,10 +175,8 @@ class LiquidityHandler {
             //ranges are set; get actual pool tick
             let pool_tick = this.get_tick_from_sqrtP_pool(sqrtP);
 
-            //if no rebalance required, change nothing
-            if (pool_tick > old_ranges.lower_trigger && pool_tick < old_ranges.upper_trigger) { new_ranges.actions = { add: [], remove: [] }; }
             //rebalance on the lower side, add range to the left and remove from right
-            else if (pool_tick <= old_ranges.lower_trigger && old_ranges.current_ranges[0][0] > this.min_supported_tick) {
+            if (pool_tick <= old_ranges.lower_trigger && old_ranges.current_ranges[0][0] > this.min_supported_tick) {
                 var adds = [], removes = [];
 
                 //while this is true, move ranges lower, keeping track of adds and removes
@@ -208,6 +206,9 @@ class LiquidityHandler {
                 new_ranges.actions.add = adds.slice(-3);
                 new_ranges.actions.remove = removes.slice(0, 3);
                 new_ranges.actions.event = "upper_trigger";
+            } else {
+                //if no rebalance required, change nothing
+                new_ranges.actions = { add: [], remove: [] };
             }
         }
         return new_ranges;
