@@ -1,56 +1,26 @@
 
 var Web3 = require('web3');
-const CONFIG = require("./config/config")
-require('dotenv').config()
+const CONFIG = require("./config/config");
+require('dotenv').config();
 var fs = require("fs");
 const web3Lib = require('./utils/web3');
-var bn = require('bignumber.js')
-
-// uniswapv3 pool address
-const UNISWAP_POOL_ADDRESS = "0x508acf810857fefa86281499068ad5d19ebce325";
-
-// defiedge strategy adress accociated with same pool address
-const DEFIEDGE_STRATEGY_ADDRESS = "0x3a4ea286af31ca181f1757cf7edbd4355f0360b5";
-
-
-// Pool params
-const SPACING = 200;
-const DEC_DELTA = 0; // this is directional if x is gov token then standard else negative of this
-
-// Strat params
-const SPACING_MULT = 1; // width of liquidity is SPACING * SPACING_MULT
-const LOWER_TRIG = 0.2; // trigger rebalance when 80% of liquidity is eaten
-const UPPER_TRIG = 0.2;
-const UPPER_THETA = 1.05; // liquidity increases by 10% to the right
-// const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
-const LOWER_THETA = 0.9
-const LIQ = 33852; // liquidity at the price below 
-const BASE_SQRT_PRICE = (181456988882692797038668774.0 / (2 ** 96)); //current sqrt price (set at the beginning/not to be queried)
-const MIN_SUPPORTED_SQRT_PRICE = Math.sqrt(0.002 / 320); // min supported price (can be > current_price, in which can only upward moves supported until this level is reached)
-const MAX_SUPPORTED_SQRT_PRICE = Math.sqrt(0.003 / 320); // see above
-
-// configuration of strategy ranges (will need to be queried at the start, if ranges are set)
-var ranges = null;
-// var ranges = {
-//     current_ranges: [],
-//     lower_trigger: 0,
-//     upper_trigger: 0
-// };
-
-var web3 = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
-
-const uniswapV3Pool = new web3.eth.Contract(CONFIG.UNIV3_POOL_ABI, UNISWAP_POOL_ADDRESS);
-const defiedgeStrategyInstance = new web3.eth.Contract(CONFIG.DEFIEDGE_STRATEGY_ABI, DEFIEDGE_STRATEGY_ADDRESS);
+var bn = require('bignumber.js');
 
 //works if x is gov token and y is base token
 class LiquidityHandler {
-    constructor() {
-        this.S = SPACING * SPACING_MULT;
-        this.O = DEC_DELTA / Math.log10(1.0001);
-        this._base_tick = this.get_tick_from_sqrtP(BASE_SQRT_PRICE);
+    constructor(description, strategy, pool, params, price_func) {
+        this.description = description;
+        this.params = params;
+        this.pool = pool;
+        this.strategy = strategy;
+        this.S = params.SPACING * params.SPACING_MULT;
+        this.O = params.DEC_DELTA / Math.log10(1.0001);
+        this._base_tick = this.get_tick_from_sqrtP(params.BASE_SQRT_PRICE);
         this.base_delta = 1.0001 ** (this.S / 2) - 1.0;
-        this.min_supported_tick = (MIN_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(MIN_SUPPORTED_SQRT_PRICE);
-        this.max_supported_tick = (MAX_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(MAX_SUPPORTED_SQRT_PRICE);
+        this.min_supported_tick = (params.MIN_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(params.MIN_SUPPORTED_SQRT_PRICE);
+        this.max_supported_tick = (params.MAX_SUPPORTED_SQRT_PRICE == Infinity) ? Infinity : this.get_tick_from_sqrtP_pool(params.MAX_SUPPORTED_SQRT_PRICE);
+        this.ranges = null;
+        this.price_func = price_func;
     }
 
     // get strategy tick from price
@@ -68,15 +38,15 @@ class LiquidityHandler {
         let lower_tick = Math.floor((ranges.current_ranges[0][0] + ranges.current_ranges[0][1]) / 2.0 / this.S);
         var liq = ranges.current_ranges[0][2];
 
-        var add_range = [(lower_tick - 1) * this.S, lower_tick * this.S, liq * LOWER_THETA];
+        var add_range = [(lower_tick - 1) * this.S, lower_tick * this.S, liq * this.params.LOWER_THETA];
         var remove_range = ranges.current_ranges[2];
         ranges.current_ranges = [
             add_range,
             ranges.current_ranges[0],
             ranges.current_ranges[1]
         ];
-        ranges.lower_trigger = Math.ceil((lower_tick - 1 + LOWER_TRIG) * this.S);
-        ranges.upper_trigger = Math.floor((lower_tick + 2 - UPPER_TRIG) * this.S);
+        ranges.lower_trigger = Math.ceil((lower_tick - 1 + this.params.LOWER_TRIG) * this.S);
+        ranges.upper_trigger = Math.floor((lower_tick + 2 - this.params.UPPER_TRIG) * this.S);
         ranges.actions = { add: [add_range], remove: [remove_range] };
         return ranges;
     }
@@ -85,36 +55,36 @@ class LiquidityHandler {
         let upper_tick = Math.floor((ranges.current_ranges[2][0] + ranges.current_ranges[2][1]) / 2.0 / this.S);
         var liq = ranges.current_ranges[2][2];
 
-        var add_range = [(upper_tick + 1) * this.S, (upper_tick + 2) * this.S, liq * UPPER_THETA];
+        var add_range = [(upper_tick + 1) * this.S, (upper_tick + 2) * this.S, liq * this.params.UPPER_THETA];
         var remove_range = ranges.current_ranges[0];
         ranges.current_ranges = [
             ranges.current_ranges[1],
             ranges.current_ranges[2],
             add_range
         ];
-        ranges.lower_trigger = Math.ceil((upper_tick - 1 + LOWER_TRIG) * this.S);
-        ranges.upper_trigger = Math.floor((upper_tick + 2 - UPPER_TRIG) * this.S);
+        ranges.lower_trigger = Math.ceil((upper_tick - 1 + this.params.LOWER_TRIG) * this.S);
+        ranges.upper_trigger = Math.floor((upper_tick + 2 - this.params.UPPER_TRIG) * this.S);
         ranges.actions = { add: [add_range], remove: [remove_range] };
         return ranges;
     }
 
-    lower_liqudity_to_amt(range, sqrtP) {
-        let liq = range[2];
-        let lower_tick = range[0];
-        let current_tick = this.get_tick_from_sqrtP_pool(sqrtP);
-        if (range[1] < current_tick) {
-            return liq * (10 ** (DEC_DELTA / 2.0)) * (1.0001 ** (lower_tick / 2.0)) * this.base_delta;
-        } else { return null; }
-    }
+    // lower_liqudity_to_amt(range, sqrtP) {
+    //     let liq = range[2];
+    //     let lower_tick = range[0];
+    //     let current_tick = this.get_tick_from_sqrtP_pool(sqrtP);
+    //     if (range[1] < current_tick) {
+    //         return liq * (10 ** (this.params.DEC_DELTA / 2.0)) * (1.0001 ** (lower_tick / 2.0)) * this.base_delta;
+    //     } else { return null; }
+    // }
 
-    upper_liqudity_to_amt(range) {
-        let liq = range[2];
-        let upper_tick = range[1];
-        let current_tick = this.get_tick_from_sqrtP_pool(sqrtP);
-        if (range[0] > current_tick) {
-            return liq * (10 ** (-DEC_DELTA / 2.0)) * (1.0001 ** (-upper_tick / 2.0)) * this.base_delta;
-        } else { return null; }
-    }
+    // upper_liqudity_to_amt(range) {
+    //     let liq = range[2];
+    //     let upper_tick = range[1];
+    //     let current_tick = this.get_tick_from_sqrtP_pool(sqrtP);
+    //     if (range[0] > current_tick) {
+    //         return liq * (10 ** (-this.params.DEC_DELTA / 2.0)) * (1.0001 ** (-upper_tick / 2.0)) * this.base_delta;
+    //     } else { return null; }
+    // }
 
     get_amt_for_range(range, sqrtP) {
         let lower_sqrtP = 1.0001 ** (range[0] / 2.0), upper_sqrtP = 1.0001 ** (range[1] / 2.0);
@@ -151,19 +121,19 @@ class LiquidityHandler {
             var current_tick = this.get_tick_from_sqrtP(sqrtP);
             let diff = current_tick - this._base_tick;
             var liq;
-            if (diff >= 0) { liq = LIQ * (UPPER_THETA ** diff); }
-            else { liq = liq = LIQ * (LOWER_THETA ** -diff); }
+            if (diff >= 0) { liq = this.params.LIQ * (this.params.UPPER_THETA ** diff); }
+            else { liq = liq = this.params.LIQ * (this.params.LOWER_THETA ** -diff); }
 
             var new_ranges = [
-                [(current_tick - 1) * this.S, current_tick * this.S, liq * LOWER_THETA],
+                [(current_tick - 1) * this.S, current_tick * this.S, liq * this.params.LOWER_THETA],
                 [current_tick * this.S, (current_tick + 1) * this.S, liq],
-                [(current_tick + 1) * this.S, (current_tick + 2) * this.S, liq * UPPER_THETA]
+                [(current_tick + 1) * this.S, (current_tick + 2) * this.S, liq * this.params.UPPER_THETA]
             ];
 
             new_ranges = {
                 current_ranges: new_ranges,
-                lower_trigger: Math.ceil((current_tick - 1 + LOWER_TRIG) * this.S),
-                upper_trigger: Math.floor((current_tick + 2 - UPPER_TRIG) * this.S),
+                lower_trigger: Math.ceil((current_tick - 1 + this.params.LOWER_TRIG) * this.S),
+                upper_trigger: Math.floor((current_tick + 2 - this.params.UPPER_TRIG) * this.S),
                 actions: {
                     add: new_ranges,
                     remove: [],
@@ -191,7 +161,7 @@ class LiquidityHandler {
                 new_ranges.actions.remove = removes.slice(0, 3);
                 new_ranges.actions.event = "lower_trigger";
 
-            } else if (pool_tick >= old_ranges.upper_trigger && old_ranges.current_ranges[2][1] < this.max_supported_tick){
+            } else if (pool_tick >= old_ranges.upper_trigger && old_ranges.current_ranges[2][1] < this.max_supported_tick) {
                 // rebalance on the upper side, Add range to the right and remove from the left
                 var adds = [], removes = [];
 
@@ -225,141 +195,174 @@ class LiquidityHandler {
         ) {
             throw "failed to verify current ranges";
         }
-        var ranges = {}
+        var ranges = {};
         ranges.current_ranges = [];
         let diff = Math.round(current_ranges[0][0] / this.S) - this._base_tick;
         let liq;
-        if (diff >= 0) { liq = LIQ * (UPPER_THETA ** diff); }
-        else { liq = liq = LIQ * (LOWER_THETA ** -diff); }
+        if (diff >= 0) { liq = this.params.LIQ * (this.params.UPPER_THETA ** diff); }
+        else { liq = liq = this.params.LIQ * (this.params.LOWER_THETA ** -diff); }
         for (let r of current_ranges) {
             ranges.current_ranges.push([r[0], r[1], liq]);
-            liq *= UPPER_THETA;
+            liq *= this.params.UPPER_THETA;
         }
-        ranges.lower_trigger = Math.ceil(current_ranges[0][0] + LOWER_TRIG * this.S);
-        ranges.upper_trigger = Math.floor(current_ranges[2][1] - UPPER_TRIG * this.S);
-        return ranges
+        ranges.lower_trigger = Math.ceil(current_ranges[0][0] + this.params.LOWER_TRIG * this.S);
+        ranges.upper_trigger = Math.floor(current_ranges[2][1] - this.params.UPPER_TRIG * this.S);
+        return ranges;
     }
+
+    set_ranges(ranges) {
+        this.ranges = ranges;
+    }
+
 }
 
-var liquidityHandler = new LiquidityHandler();
+async function init() {
+    for (let liquidityHandler of liquidityHandlers) {
+        var strategyTicks = await liquidityHandler.strategy.methods.getTicks().call();
 
-init();
-
-async function init(){
-    
-    var strategyTicks = await defiedgeStrategyInstance.methods.getTicks().call();
-
-    if(strategyTicks.length > 0){
-        strategyTicks = strategyTicks.map(ticks => [Number(ticks.tickLower), Number(ticks.tickUpper) ]);
-        ranges = liquidityHandler.init_ranges(strategyTicks);
+        if (strategyTicks.length > 0) {
+            strategyTicks = strategyTicks.map(ticks => [Number(ticks.tickLower), Number(ticks.tickUpper)]);
+            liquidityHandler.set_ranges(liquidityHandler.init_ranges(strategyTicks));
+        }
     }
-
     // run every 30 seconds
     setInterval(run, 30000);
 }
 
 async function run() {
 
-    try {
+    for (let liquidityHandler of liquidityHandlers) {
+        try {
+            // query sqrtP from the pool
+            var { sqrtPriceX96 } = await liquidityHandler.pool.methods.slot0().call();
+            var sqrtP = liquidityHandler.price_func(sqrtPriceX96);
 
-        // query sqrtP from the pool
-        var { sqrtPriceX96 } = await uniswapV3Pool.methods.slot0().call();
-        var sqrtP = (sqrtPriceX96 / (2 ** 96));
-        // var sqrtP = BASE_SQRT_PRICE / 1.0001 ** (290);
-        // console.log(sqrtP)
+            var new_ranges = liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP, ranges);
+            // console.log(new_ranges, liquidityHandler.ranges)
 
-        var new_ranges = liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP, ranges);
-        // console.log(new_ranges, ranges)
+            var partialTicks = new Array();
+            var newTicks = new Array();
 
-        var partialTicks = new Array();
-        var newTicks = new Array();
+            var strategyTicks = await liquidityHandler.strategy.methods.getTicks().call();
 
-        var strategyTicks = await defiedgeStrategyInstance.methods.getTicks().call();
-        // console.log(strategyTicks)
-        // console.log(strategyTicks[0])
-        // console.log(strategyTicks[1])
-        // console.log(strategyTicks[2])
+            // loop over actions.remove and remove liquidity
+            for (i = 0; i < new_ranges.actions.remove.length; i++) {
+                range_this = new_ranges.actions.remove[i];
+                liquidity = Math.floor(range_this[2]);
 
-        // ranges.actions.remove[0] = ['-119200', '-119000']
-        // ranges.actions.remove[1] = ['-118800', '-118600']
-
-        // loop over actions.remove and remove liquidity
-        for (i = 0; i < new_ranges.actions.remove.length; i++) {
-            range_this = new_ranges.actions.remove[i];
-            liquidity = Math.floor(range_this[2]);
-
-            let indexInStrategyTicks = strategyTicks.findIndex( (x) => parseInt(x.tickLower) == parseInt(range_this[0]) && parseInt(x.tickUpper) == parseInt(range_this[1]))
-            if(indexInStrategyTicks < 0) {
-                continue;
-            }
-            console.log({indexInStrategyTicks})
-            console.log("Remove liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity);
-            let pTick = {
-                index: indexInStrategyTicks, // to be calculated
-                burn: true,
-                amount0: 0, // to be calculated,
-                amount1: 0 // to be calculated
-            }
-            partialTicks.push(pTick);
-        }
-
-        // sort array in decending way
-        partialTicks.sort((a, b) => b.index - a.index);
-
-        // loop over actions.add and add liquidity
-        for (i = 0; i < new_ranges.actions.add.length; i++) {
-            range_this = new_ranges.actions.add[i];
-            liquidity = Math.floor(range_this[2])
-            let amount0 = null, amount1 = null;
-            let amounts = liquidityHandler.get_amt_for_range(range_this, sqrtP);
-
-            amount0 = amounts.amount0;
-            amount1 = amounts.amount1;
-            console.log("Add liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity, "& amounts = ", (amount0, amount1));
-            let newTick = {
-                tickLower: range_this[0],
-                tickUpper: range_this[1],
-                amount0: new bn(amount0).multipliedBy("1000000000000000000").toFixed(0), // UNB,
-                amount1: new bn(amount1).multipliedBy("1000000000000000000").toFixed(0) // WBNB
-            };
-            newTicks.push(newTick);
-        } 
-
-        
-        if(newTicks.length > 0 || partialTicks.length > 0){
-            // console.log({partialTicks})
-            // console.log({newTicks})
-            
-            // execute rebalance transaction
-            let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks)
-            
-            let txStatus = await web3Lib.waitForConfirmation(web3, rebalanceTx);
-
-            // if transaction succeed then set new ranges and save logs
-            if(txStatus){
-                ranges = new_ranges;
-                let log = {
-                    "removedRanges": JSON.stringify(ranges.actions.remove),
-                    "addedRanges": JSON.stringify(ranges.actions.add),
-                    "rebalanceTx": rebalanceTx,
-                    "currentRanges": JSON.stringify(ranges.current_ranges),
+                let indexInStrategyTicks = strategyTicks.findIndex((x) => parseInt(x.tickLower) == parseInt(range_this[0]) && parseInt(x.tickUpper) == parseInt(range_this[1]));
+                if (indexInStrategyTicks < 0) {
+                    continue;
+                }
+                console.log({ indexInStrategyTicks });
+                console.log("Remove liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity);
+                let pTick = {
+                    index: indexInStrategyTicks, // to be calculated
+                    burn: true,
+                    amount0: 0, // to be calculated,
+                    amount1: 0 // to be calculated
                 };
-                console.log(log);
-                fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
-            } else {
-                fs.appendFile('./logs/dexerrors.txt', Date.now() + " - tx failed: " + rebalanceTx + ",\n", (err) => { });
+                partialTicks.push(pTick);
             }
 
-        } else {
-            // console.log("Nothing to do...")
+            // sort array in decending way
+            partialTicks.sort((a, b) => b.index - a.index);
+
+            // loop over actions.add and add liquidity
+            for (i = 0; i < new_ranges.actions.add.length; i++) {
+                range_this = new_ranges.actions.add[i];
+                liquidity = Math.floor(range_this[2]);
+                let amount0 = null, amount1 = null;
+                let amounts = liquidityHandler.get_amt_for_range(range_this, sqrtP);
+
+                amount0 = amounts.amount0;
+                amount1 = amounts.amount1;
+                console.log("Add liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity, "& amounts = ", (amount0, amount1));
+                let newTick = {
+                    tickLower: range_this[0],
+                    tickUpper: range_this[1],
+                    amount0: new bn(amount0).multipliedBy(liquidityHandler.params.DEC_STR0).toFixed(0), // UNB,
+                    amount1: new bn(amount1).multipliedBy(liquidityHandler.params.DEC_STR1).toFixed(0) // WBNB
+                };
+                newTicks.push(newTick);
+            }
+
+            if (newTicks.length > 0 || partialTicks.length > 0) {
+                // console.log({partialTicks})
+                // console.log({newTicks})
+
+                // execute rebalance transaction
+                let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks);
+
+                let txStatus = await web3Lib.waitForConfirmation(web3, rebalanceTx);
+
+                // if transaction succeed then set new ranges and save logs
+                if (txStatus) {
+                    liquidityHandler.set_ranges(new_ranges);
+                    let log = {
+                        "strategy": liquidityHandler.description,
+                        "removedRanges": JSON.stringify(new_ranges.actions.remove),
+                        "addedRanges": JSON.stringify(new_ranges.actions.add),
+                        "rebalanceTx": rebalanceTx,
+                        "currentRanges": JSON.stringify(new_ranges.current_ranges),
+                    };
+                    console.log(log);
+                    fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
+                } else {
+                    fs.appendFile('./logs/dexerrors.txt', Date.now() + " - tx failed: " + rebalanceTx + ",\n", (err) => { });
+                }
+
+            } else {
+                // console.log("Nothing to do...")
+            }
+
+        } catch (e) {
+            console.log("error while initialization", e.toString());
+            let info_str;
+            try { info_str = JSON.stringify({ "strategy": liquidityHandler.description, "ranges": liquidityHandler.ranges.current_ranges }); }
+            catch { info_str = ""; }
+            fs.appendFile('./logs/dexerrors.txt', Date.now() + " - error while initialization: " + e.toString() + ",\n" + info_str + "\n", (err) => { });
         }
-
-    } catch(e){
-        console.log("error while initialization", e.toString());
-        let info_str;
-        try {info_str = JSON.stringify(ranges.current_ranges);}
-        catch {info_str = ""}
-        fs.appendFile('./logs/dexerrors.txt', Date.now() + " - error while initialization: " + e.toString() + ",\n" + info_str + "\n", (err) => { });
     }
-
 }
+
+var web3_bsc = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
+var liquidityHandlers = [];
+
+//UNB/BNB strategy
+// uniswapv3 pool address
+var UNISWAP_POOL_ADDRESS = "0x508acf810857fefa86281499068ad5d19ebce325";
+
+// defiedge strategy adress accociated with same pool address
+var DEFIEDGE_STRATEGY_ADDRESS = "0x3a4ea286af31ca181f1757cf7edbd4355f0360b5";
+
+liquidityHandlers.concat(new LiquidityHandler(
+    "UNB/BNB Strategy",
+    new web3_bsc.eth.Contract(CONFIG.DEFIEDGE_STRATEGY_ABI, DEFIEDGE_STRATEGY_ADDRESS), //strategy
+    new web3_bsc.eth.Contract(CONFIG.UNIV3_POOL_ABI, UNISWAP_POOL_ADDRESS), //pool
+    // params 
+    {
+        // Pool params
+        SPACING: 200,
+        DEC_DELTA: 0, // this is directional if x is gov token then standard else negative of this
+        // For amount0, amount1 conversion
+        DEC_STR0: "1000000000000000000", // UNB
+        DEC_STR1: "1000000000000000000", // WBNB
+
+        // Strat params
+        SPACING_MULT: 1, // width of liquidity is SPACING * SPACING_MULT
+        LOWER_TRIG: 0.2, // trigger rebalance when 80% of liquidity is eaten
+        UPPER_TRIG: 0.2,
+        UPPER_THETA: 1.05, // liquidity increases by 10% to the right
+        // const LOWER_THETA = 1.0 / UPPER_THETA; // THIS IS TO AVOID FRONTING
+        LOWER_THETA: 0.9,
+        LIQ: 33852, // liquidity at the price below 
+        BASE_SQRT_PRICE: (181456988882692797038668774.0 / (2 ** 96)), //current sqrt price (set at the beginning/not to be queried)
+        MIN_SUPPORTED_SQRT_PRICE: Math.sqrt(0.002 / 320), // min supported price (can be > current_price, in which can only upward moves supported until this level is reached)
+        MAX_SUPPORTED_SQRT_PRICE: Math.sqrt(0.003 / 320) // see above
+    },
+    // price conversion function
+    function (sqrtPriceX96) { return sqrtPriceX96 / (2 ** 96); }
+));
+
+init();
