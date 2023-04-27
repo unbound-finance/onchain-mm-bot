@@ -1,10 +1,7 @@
 var bn = require('bignumber.js')
 const Tx = require('ethereumjs-tx')
 
-var account = process.env.ADDRESS; // account address accociated with privateKey
-var privateKey = Buffer.from(process.env.PRIVATE_KEY, 'hex') // without 0x
-
-exports.rebalance = async(web3, strategyContractInstance, chainId, partialTicks, newTicks) => {
+exports.rebalance = async(web3, strategyContractInstance, chainId, partialTicks, newTicks, account, privateKey) => {
     
 
     return new Promise(function(resolve, reject){
