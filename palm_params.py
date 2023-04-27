@@ -73,3 +73,33 @@ print(f"theta_upper = {theta}")
 print(f"base_L = {L}")
 print(f"support={(delta ** (2 * K_down) - 1)* 100:.2f}%")
 print(f"Liquidity_min = {100/theta ** K_down:.2f}%")
+
+#-------------------------DISTRIBUTIONS---------------------
+from scipy.stats import norm
+sigma = 0.50 
+drift = 0.10
+
+# approx K_50
+K_50 = bisection(
+    lambda k: gov_reserves(L, theta, P, delta, k) - GOV / 2.0,
+    0, 
+    K_depl
+)
+
+ratio = 1.0001 ** (WINDOW_SIZE * K_50)
+def levy_cdf(t, T, S0, sigma):
+    m = np.log(T/S0) / sigma
+    return 2 * (1 - norm.cdf(m / np.sqrt(t)))
+    
+def levy_quantile(p, T, S0, sigma):
+    m = np.log(T/S0) / sigma
+    sqrtt = m / norm.ppf(1 - p/2)
+    return sqrtt * sqrtt
+
+print("Quantiles:")
+for p in [0.5, 0.6, 0.7, 0.8, 0.9, 0.95]:
+    print(p, levy_quantile(p, ratio, 1.0, sigma))
+
+if drift > 0:
+    m = np.log(ratio)
+    print("Expectation:", m / drift, "Variance:", m * sigma * sigma / (drift ** 3))
