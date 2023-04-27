@@ -31,6 +31,11 @@ class LiquidityHandler {
         return Math.round((2 * Math.log(sqrtP) / Math.log(1.0001) - this.O));
     }
 
+    // get pool sqrt price from tick
+    get_sqrtP_from_tick_pool(tick) {
+        return 1.0001 ** ((tick + this.O) / 2.0);
+    }
+
     // Add a range on the left and remove the range on the right
     move_lower(ranges) {
         let lower_tick = Math.floor((ranges.current_ranges[0][0] + ranges.current_ranges[0][1]) / 2.0 / this.S);
@@ -85,15 +90,15 @@ class LiquidityHandler {
     // }
 
     get_amt_for_range(range, sqrtP) {
-        let lower_sqrtP = 1.0001 ** (range[0] / 2.0), upper_sqrtP = 1.0001 ** (range[1] / 2.0);
+        let lower_sqrtP = this.get_sqrtP_from_tick_pool(range[0]), upper_sqrtP = this.get_sqrtP_from_tick_pool(range[1]);
         var amount0 = 0, amount1 = 0;
         if (lower_sqrtP >= sqrtP) {
-            amount0 = range[2] * (1.0001 ** (-range[0] / 2.0) - 1.0001 ** (-range[1] / 2.0));
+            amount0 = range[2] * (1 / lower_sqrtP - 1 / upper_sqrtP);
         } else if (sqrtP >= upper_sqrtP) {
-            amount1 = range[2] * (1.0001 ** (range[1] / 2.0) - 1.0001 ** (range[0] / 2.0));
+            amount1 = range[2] * (upper_sqrtP - lower_sqrtP);
         } else {
-            amount0 = range[2] * (1 / sqrtP - 1.0001 ** (-range[1] / 2.0));
-            amount1 = range[2] * (sqrtP - 1.0001 ** (range[0] / 2.0));
+            amount0 = range[2] * (1 / sqrtP - 1 / upper_sqrtP);
+            amount1 = range[2] * (sqrtP - lower_sqrtP);
         }
         return {
             amount0: amount0,
@@ -238,7 +243,7 @@ class LiquidityHandler {
     }
 
     // loop over new_ranges.actions.add and add liquidity
-    get_newTicks(ranges, sqrtP){
+    get_newTicks(ranges, sqrtP) {
         var newTicks = new Array();
 
         for (let i = 0; i < ranges.length; i++) {
@@ -250,7 +255,7 @@ class LiquidityHandler {
             amount0 = amounts.amount0;
             amount1 = amounts.amount1;
             // console.log({amount0})
-            console.log({amount1})
+            console.log({ amount1 });
             // console.log(this.params.DEC_STR0)
             // console.log(this.params.DEC_STR1)
             // console.log("Add liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity, "& amounts = ", (amount0, amount1));
