@@ -227,8 +227,8 @@ async function init() {
             catch (e) { console.log(e.toString()); }
         }
     }
-    // run every 30 seconds
-    setInterval(run, 30000);
+    // run every 120 seconds
+    setInterval(run, 120000);
 }
 
 async function run() {
