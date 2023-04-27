@@ -8,10 +8,11 @@ var bn = require('bignumber.js');
 
 //works if x is gov token and y is base token
 class LiquidityHandler {
-    constructor(description, strategy, pool, params, price_func) {
+    constructor(description, strategy, pool, chain, params, price_func) {
         this.description = description;
         this.params = params;
         this.pool = pool;
+        this.chain = chain;
         this.strategy = strategy;
         this.S = params.SPACING * params.SPACING_MULT;
         this.O = params.DEC_DELTA / Math.log10(1.0001);
@@ -292,9 +293,9 @@ async function run() {
                 // console.log({newTicks})
 
                 // execute rebalance transaction
-                let rebalanceTx = await web3Lib.rebalance(web3, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks);
+                let rebalanceTx = await web3Lib.rebalance(liquidityHandler.chain, defiedgeStrategyInstance, CONFIG.CHAIN_ID_BSC, partialTicks, newTicks);
 
-                let txStatus = await web3Lib.waitForConfirmation(web3, rebalanceTx);
+                let txStatus = await web3Lib.waitForConfirmation(liquidityHandler.chain, rebalanceTx);
 
                 // if transaction succeed then set new ranges and save logs
                 if (txStatus) {
@@ -340,6 +341,7 @@ liquidityHandlers.concat(new LiquidityHandler(
     "UNB/BNB Strategy",
     new web3_bsc.eth.Contract(CONFIG.DEFIEDGE_STRATEGY_ABI, DEFIEDGE_STRATEGY_ADDRESS), //strategy
     new web3_bsc.eth.Contract(CONFIG.UNIV3_POOL_ABI, UNISWAP_POOL_ADDRESS), //pool
+    web3_bsc, //chain
     // params 
     {
         // Pool params
