@@ -191,8 +191,8 @@ class LiquidityHandler {
         current_ranges.sort(function (a, b) { return a[0] - b[0]; });
         console.log(current_ranges);
         if (
-            current_ranges[1][0] - current_ranges[0][0] != this.S || current_ranges[2][0] - current_ranges[1][0] != this.S
-            || current_ranges[1][0] != current_ranges[0][1] || current_ranges[2][0] != current_ranges[1][1] || current_ranges.length != 3
+            current_ranges.length != 3 || current_ranges[1][0] - current_ranges[0][0] != this.S || current_ranges[2][0] - current_ranges[1][0] != this.S
+            || current_ranges[1][0] != current_ranges[0][1] || current_ranges[2][0] != current_ranges[1][1]
         ) {
             throw "failed to verify current ranges";
         }
@@ -223,7 +223,8 @@ async function init() {
 
         if (strategyTicks.length > 0) {
             strategyTicks = strategyTicks.map(ticks => [Number(ticks.tickLower), Number(ticks.tickUpper)]);
-            liquidityHandler.set_ranges(liquidityHandler.init_ranges(strategyTicks));
+            try { liquidityHandler.set_ranges(liquidityHandler.init_ranges(strategyTicks)); }
+            catch (e) { console.log(e.toString()); }
         }
     }
     // run every 30 seconds
@@ -238,7 +239,7 @@ async function run() {
             var { sqrtPriceX96 } = await liquidityHandler.pool.methods.slot0().call();
             var sqrtP = liquidityHandler.price_func(sqrtPriceX96);
 
-            var new_ranges = liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP, ranges);
+            var new_ranges = liquidityHandler.set_liquidity_config_at_sqrtP(sqrtP, liquidityHandler.ranges);
             // console.log(new_ranges, liquidityHandler.ranges)
 
             var partialTicks = new Array();
@@ -328,6 +329,7 @@ async function run() {
 }
 
 var web3_bsc = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_BSC));
+var web3_arbitrum = new Web3(new Web3.providers.HttpProvider(CONFIG.NETWORK_RPC_ARBITRUM));
 var liquidityHandlers = [];
 
 //UNB/BNB strategy
@@ -365,6 +367,34 @@ liquidityHandlers.concat(new LiquidityHandler(
     },
     // price conversion function
     function (sqrtPriceX96) { return sqrtPriceX96 / (2 ** 96); }
+));
+
+// SIS/USDC Strategy (GOV = 1079.745, BASE = 20)
+liquidityHandlers.concat(new LiquidityHandler(
+    "SIS/USDC Strategy",
+    new web3_arbitrum.eth.Contract(CONFIG.DEFIEDGE_STRATEGY_ABI, "0xbf8a5e9a79abd1cf0b7c95a78361e46d26690382"), //strategy
+    new web3_arbitrum.eth.Contract(CONFIG.UNIV3_POOL_ABI, "0x951d46725b8d31debe5e1bdafcc02d64b7fb6774"), //pool
+    web3_arbitrum, //chain
+    // params
+    {
+        //Pool params
+        SPACING: 200,
+        DEC_DELTA: 12,
+        DEC_STR0: "1000000000000000000",
+        DEC_STR1: "1000000",
+
+        // Strat params
+        SPACING_MULT: 1,
+        LOWER_TRIG: 0.2,
+        UPPER_TRIG: 0.2,
+        UPPER_THETA: 1.1347,
+        LOWER_THETA: 1 / 1.1347,
+        LIQ: 806.384,
+        BASE_SQRT_PRICE: 33979032160979408925259.0 * (10 ** 6) / 2 ** 96,
+        MIN_SUPPORTED_SQRT_PRICE: Math.sqrt(0.20),
+        MAX_SUPPORTED_SQRT_PRICE: Math.sqrt(0.26)
+    },
+    function (sqrtPriceX96) { return sqrtPriceX96 * (10 ** 6) / (2 ** 96); }
 ));
 
 init();
