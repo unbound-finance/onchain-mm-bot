@@ -25,7 +25,7 @@ def base_reserves(L, P, K, delta, theta):
 
 #--------- SET THESE PARAMS-----------------------------
 # current price
-sqrtP = 33979032160979408925259.0 * (10 ** 6) / 2 ** 96 
+sqrtP = 33773734510021576330964.0 * (10 ** 6) / 2 ** 96 
 P = sqrtP * sqrtP
 
 # BNB price
