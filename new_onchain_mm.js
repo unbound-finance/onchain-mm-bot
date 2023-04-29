@@ -65,13 +65,13 @@ async function run(){
                         "strategy": liquidityHandler.description,
                         "removedRanges": JSON.stringify(new_ranges.actions.remove),
                         "addedRanges": JSON.stringify(new_ranges.actions.add),
-                        "rebalanceTx": rebalanceTx,
+                        "rebalanceTx": rebalanceTxHash,
                         "currentRanges": JSON.stringify(new_ranges.current_ranges),
                     };
                     console.log(log);
                     fs.appendFile('./logs/logs.txt', JSON.stringify(log) + ",\n", (err) => { });
                 } else {
-                    fs.appendFile('./logs/dexerrors.txt', Date.now() + " - tx failed: " + rebalanceTx + ",\n", (err) => { });
+                    fs.appendFile('./logs/dexerrors.txt', Date.now() + " - tx failed: " + rebalanceTxHash + ",\n", (err) => { });
                 }
             }
 
