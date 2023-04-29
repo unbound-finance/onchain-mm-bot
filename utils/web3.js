@@ -59,6 +59,7 @@ exports.rebalance = async(web3, strategyContractInstance, chainId, partialTicks,
                                 web3.eth.sendSignedTransaction('0x' + serializedTx.toString('hex'), async function(err3, txHash) {
                                     if (err3) {
                                         console.log(err3)
+                                        resolve(false)
                                     } else {
                                         resolve(txHash)
                                     }
@@ -86,22 +87,26 @@ exports.rebalance = async(web3, strategyContractInstance, chainId, partialTicks,
 
 exports.waitForConfirmation = async (web3, txHash) => {
     return new Promise(function(resolve, reject){
-        let txCheck = setInterval(()=>{
-            // console.log('txcheck====')
-            web3.eth.getTransactionReceipt(txHash, function(err, response){
-                if(!err){
-                    console.log(response ? "true" : "false")
-                    if(response != null){
-                        if(response.status == '0x0'){
-                            clearInterval(txCheck)
-                            resolve(false)
-                        } else if(response.status == '0x1'){
-                            clearInterval(txCheck)
-                            resolve(true)
+        if(txHash){
+            let txCheck = setInterval(()=>{
+                console.log('txcheck====')
+                web3.eth.getTransactionReceipt(txHash, function(err, response){
+                    if(!err){
+                        console.log(response ? "true" : "false")
+                        if(response != null){
+                            if(response.status == '0x0'){
+                                clearInterval(txCheck)
+                                resolve(false)
+                            } else if(response.status == '0x1'){
+                                clearInterval(txCheck)
+                                resolve(true)
+                            }
                         }
                     }
-                }
-            })
-        }, 2000)
+                })
+            }, 2000)
+        } else {
+            resolve(false)
+        }
     })
 }

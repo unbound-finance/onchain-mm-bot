@@ -255,7 +255,7 @@ class LiquidityHandler {
             amount0 = amounts.amount0;
             amount1 = amounts.amount1;
             // console.log({amount0})
-            console.log({ amount1 });
+            // console.log({ amount1 });
             // console.log(this.params.DEC_STR0)
             // console.log(this.params.DEC_STR1)
             // console.log("Add liquidity from lowerTick=", range_this[0], " and upperTick = ", range_this[1], " with L = ", liquidity, "& amounts = ", (amount0, amount1));
