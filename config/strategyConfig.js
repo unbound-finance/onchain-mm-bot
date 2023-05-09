@@ -74,7 +74,7 @@ const STRATEGY_1 = {
         LOWER_THETA: 1 / 1.1227,
         LIQ: 798.567,
         BASE_SQRT_PRICE: 33773734510021576330964.0 * (10 ** 6) / 2 ** 96,
-        MIN_SUPPORTED_SQRT_PRICE: Math.sqrt(0.20),
+        MIN_SUPPORTED_SQRT_PRICE: Math.sqrt(0.15),
         MAX_SUPPORTED_SQRT_PRICE: Math.sqrt(0.26)
     },
     priceFunction: function (sqrtPriceX96) { return sqrtPriceX96 * (10 ** 6) / (2 ** 96); }
