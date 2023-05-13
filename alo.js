@@ -1,15 +1,49 @@
+var Web3 = require('web3');
+const axios = require("axios")
+var bn = require('bignumber.js')
+var fs = require("fs");
+const ABI = require("./config/abi");
+const web3Lib = require('./utils/web3');
+require('dotenv').config();
+
+const OPTIMISM_NETWORK_DETAILS = {
+    networkName: "optimism",
+    networkRPC: "https://1rpc.io/op",
+    chainId: 10,
+    web3Object: undefined
+};
+
+const ARBITRUM_NETWORK_DETAILS = {
+    networkName: "arbitrum",
+    networkRPC: "https://arb1.arbitrum.io/rpc",
+    chainId: 42161,
+    web3Object: undefined
+};
+
+
+OPTIMISM_NETWORK_DETAILS.web3Object = new Web3(new Web3.providers.HttpProvider(OPTIMISM_NETWORK_DETAILS.networkRPC));
+ARBITRUM_NETWORK_DETAILS.web3Object = new Web3(new Web3.providers.HttpProvider(ARBITRUM_NETWORK_DETAILS.networkRPC));
+
 const ETHSNX = {
     id: "0x9a42f5bd1397b142e3ebc0d29ef50ac7ec22b8f0",
+    poolAddress: "0x0392b358CE4547601BEFa962680BedE836606ae2",
     liquidation_date: '2023-09-15',
     DEC_STR0: "1000000000000000000", // 18
     DEC_STR1: "1000000000000000000", // 18
+    networkDetails: OPTIMISM_NETWORK_DETAILS,
+    account: process.env.ALO_ADDR_1, // strategy manager address
+    pkey: Buffer.from(process.env.ALO_PKEY_1, 'hex') // strategy manager address key
 }
 
 const ETHVSTA = {
     id: "0xd5ab558dc523d5cebea69164aa555455da5e73b6",
+    poolAddress: "0x3C711D3B25aE5C37eE38afc10B589C3bC6419EdF",
     liquidation_date: '2023-09-15',
     DEC_STR0: "1000000000000000000", // 18
     DEC_STR1: "1000000000000000000", // 18
+    networkDetails: ARBITRUM_NETWORK_DETAILS,
+    account: process.env.ALO_ADDR_2, // strategy manager address
+    pkey: Buffer.from(process.env.ALO_PKEY_2, 'hex') // strategy manager address key
 } 
 
 var strategies = [
@@ -33,7 +67,7 @@ function get_new_ticks(ranges, DEC_STR0, DEC_STR1) {
     return newTicks;
 }
 
-function get_partial_ticks(ranges) {
+function get_partial_ticks(ranges, strategyTicks) {
     var partialTicks = new Array();
     for (let i = 0; i < ranges.length; i++) {
         let range_this = ranges[i];
@@ -55,48 +89,107 @@ function get_partial_ticks(ranges) {
     return partialTicks.sort((a, b) => b.index - a.index);
 }
 
+init()
+async function init(){
+
+    for (let strategy of strategies) {
+        strategy['poolInstance'] = new strategy.networkDetails.web3Object.eth.Contract(ABI.UNIV3_POOL_ABI, strategy.poolAddress)
+        strategy['strategyInstance'] = new strategy.networkDetails.web3Object.eth.Contract(ABI.DEFIEDGE_STRATEGY_ABI, strategy.id)
+    }
+
+    // run every 15 minutes
+    setInterval(run, 900000);
+}
+
 // run every 10-15 minutes
 async function run() {
     for (let strategy of strategies) {
-        query = {
+
+        let liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
+        let rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
+
+        let strategyTicks = rangesData.data.orders.map(ticks => ({ 
+            tickLower: Number(ticks.tickLower),
+            tickUpper: Number(ticks.tickUpper),
+            amount0: new bn(ticks.amount0.hex).dividedBy(strategy.DEC_STR0).toNumber(0),
+            amount1: new bn(ticks.amount1.hex).dividedBy(strategy.DEC_STR1).toNumber(0)
+        }));
+
+        let query = {
             "type": "query",
             "strategy_id": strategy.id,
-            "amount0": null, // total token 0
-            "amount1": null, // total token 1
+            "amount0": liquidity.data.amount0Total, // total token 0
+            "amount1": liquidity.data.amount1Total, // total token 1
             "liquidation_date": strategy.liquidation_date,
-            "tick": null, //current tick
-            "ranges": [{
-                "tickLower": null,
-                "tickUpper": null,
-                "amount0": null,
-                "amount1": null
-            }]
+            "tick": rangesData.data.currentPrice.tick, //current tick
+            "ranges": strategyTicks
         }
+        // console.log(query)
 
         // make json query to strategyAPI at http://178.128.114.22
-        response = make_query(query)
-        var new_ticks = get_new_ticks(responese['adds'], strategy.DEC_STR0, strategy.DEC_STR1)
-        var partial_ticks = get_partial_ticks(response['removes'])
+        response = await axios.request({
+            method: 'get',
+            url: 'http://178.128.114.22/',
+            headers: { 
+              'Content-Type': 'application/json'
+            },
+            data : JSON.stringify(query)
+        });
+        console.log(response.data)
 
-        // do rebalance
-        // wait for tx to finish
+        var new_ticks = get_new_ticks(response.data[0].output['adds'], strategy.DEC_STR0, strategy.DEC_STR1)
+        var partial_ticks = get_partial_ticks(response.data[0].output['removes'], strategyTicks)
+        console.log({new_ticks})
+        console.log({partial_ticks})
 
-        // remake query with new ranges and set type of "ack"
-        query = {
-            "type": "ack",
-            "strategy_id": strategy.id,
-            "amount0": null, // total token 0
-            "amount1": null, // total token 1
-            "liquidation_date": strategy.liquidation_date,
-            "tick": null, //current tick
-            "ranges": [{
-                "tickLower": null,
-                "tickUpper": null,
-                "amount0": null,
-                "amount1": null
-            }]
+        if(new_ticks.length > 0 || partial_ticks.length > 0){
+            // do rebalance
+            let rebalanceTxHash = await web3Lib.rebalance(
+                strategy.networkDetails.web3Object,
+                strategy.strategyInstance,
+                strategy.networkDetails.chainId,
+                partial_ticks,
+                new_ticks,
+                strategy.account,
+                strategy.pkey,
+            );
+            console.log({rebalanceTxHash})
+            // wait for transaction confirmation
+            await web3Lib.waitForConfirmation(strategy.networkDetails.web3Object, rebalanceTxHash);
+
+            // remake query with new ranges and set type of "ack"
+            liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
+            rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
+    
+            strategyTicks = rangesData.data.orders.map(ticks => ({ 
+                tickLower: Number(ticks.tickLower),
+                tickUpper: Number(ticks.tickUpper),
+                amount0: new bn(ticks.amount0.hex).dividedBy(strategy.DEC_STR0).toNumber(0),
+                amount1: new bn(ticks.amount1.hex).dividedBy(strategy.DEC_STR1).toNumber(0)
+            }));
+    
+            query = {
+                "type": "ack",
+                "strategy_id": strategy.id,
+                "amount0": liquidity.data.amount0Total, // total token 0
+                "amount1": liquidity.data.amount1Total, // total token 1
+                "liquidation_date": strategy.liquidation_date,
+                "tick": rangesData.data.currentPrice.tick, //current tick
+                "ranges": strategyTicks
+            }
+            console.log({query})
+            response = await axios.request({
+                method: 'get',
+                url: 'http://178.128.114.22/',
+                headers: { 
+                'Content-Type': 'application/json'
+                },
+                data : JSON.stringify(query)
+            });
+            console.log(JSON.stringify(response.data[0], null, 4))
+            // log response
+            fs.appendFile('./logs/alologs.txt', JSON.stringify(response.data[0], null, 4) + ",\n\n", (err) => { });
         }
-        response = make_query(make_query)
-        // log response
+        
     }
 }
