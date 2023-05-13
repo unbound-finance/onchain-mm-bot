@@ -105,71 +105,19 @@ async function init(){
 async function run() {
     for (let strategy of strategies) {
 
-        let liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
-        let rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
+        try {
+            let liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
+            let rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
 
-        let strategyTicks = rangesData.data.orders.map(ticks => ({ 
-            tickLower: Number(ticks.tickLower),
-            tickUpper: Number(ticks.tickUpper),
-            amount0: new bn(ticks.amount0.hex).dividedBy(strategy.DEC_STR0).toNumber(0),
-            amount1: new bn(ticks.amount1.hex).dividedBy(strategy.DEC_STR1).toNumber(0)
-        }));
-
-        let query = {
-            "type": "query",
-            "strategy_id": strategy.id,
-            "amount0": liquidity.data.amount0Total, // total token 0
-            "amount1": liquidity.data.amount1Total, // total token 1
-            "liquidation_date": strategy.liquidation_date,
-            "tick": rangesData.data.currentPrice.tick, //current tick
-            "ranges": strategyTicks
-        }
-        // console.log(query)
-
-        // make json query to strategyAPI at http://178.128.114.22
-        response = await axios.request({
-            method: 'get',
-            url: 'http://178.128.114.22/',
-            headers: { 
-              'Content-Type': 'application/json'
-            },
-            data : JSON.stringify(query)
-        });
-        console.log(response.data)
-
-        var new_ticks = get_new_ticks(response.data[0].output['adds'], strategy.DEC_STR0, strategy.DEC_STR1)
-        var partial_ticks = get_partial_ticks(response.data[0].output['removes'], strategyTicks)
-        console.log({new_ticks})
-        console.log({partial_ticks})
-
-        if(new_ticks.length > 0 || partial_ticks.length > 0){
-            // do rebalance
-            let rebalanceTxHash = await web3Lib.rebalance(
-                strategy.networkDetails.web3Object,
-                strategy.strategyInstance,
-                strategy.networkDetails.chainId,
-                partial_ticks,
-                new_ticks,
-                strategy.account,
-                strategy.pkey,
-            );
-            console.log({rebalanceTxHash})
-            // wait for transaction confirmation
-            await web3Lib.waitForConfirmation(strategy.networkDetails.web3Object, rebalanceTxHash);
-
-            // remake query with new ranges and set type of "ack"
-            liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
-            rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
-    
-            strategyTicks = rangesData.data.orders.map(ticks => ({ 
+            let strategyTicks = rangesData.data.orders.map(ticks => ({ 
                 tickLower: Number(ticks.tickLower),
                 tickUpper: Number(ticks.tickUpper),
                 amount0: new bn(ticks.amount0.hex).dividedBy(strategy.DEC_STR0).toNumber(0),
                 amount1: new bn(ticks.amount1.hex).dividedBy(strategy.DEC_STR1).toNumber(0)
             }));
-    
-            query = {
-                "type": "ack",
+
+            let query = {
+                "type": "query",
                 "strategy_id": strategy.id,
                 "amount0": liquidity.data.amount0Total, // total token 0
                 "amount1": liquidity.data.amount1Total, // total token 1
@@ -177,7 +125,9 @@ async function run() {
                 "tick": rangesData.data.currentPrice.tick, //current tick
                 "ranges": strategyTicks
             }
-            console.log({query})
+            // console.log(query)
+
+            // make json query to strategyAPI at http://178.128.114.22
             response = await axios.request({
                 method: 'get',
                 url: 'http://178.128.114.22/',
@@ -186,9 +136,67 @@ async function run() {
                 },
                 data : JSON.stringify(query)
             });
-            console.log(JSON.stringify(response.data[0], null, 4))
-            // log response
-            fs.appendFile('./logs/alologs.txt', JSON.stringify(response.data[0], null, 4) + ",\n\n", (err) => { });
+            console.log(response.data)
+
+            var new_ticks = get_new_ticks(response.data[0].output['adds'], strategy.DEC_STR0, strategy.DEC_STR1)
+            var partial_ticks = get_partial_ticks(response.data[0].output['removes'], strategyTicks)
+            console.log({new_ticks})
+            console.log({partial_ticks})
+
+            if(new_ticks.length > 0 || partial_ticks.length > 0){
+                // do rebalance
+                let rebalanceTxHash = await web3Lib.rebalance(
+                    strategy.networkDetails.web3Object,
+                    strategy.strategyInstance,
+                    strategy.networkDetails.chainId,
+                    partial_ticks,
+                    new_ticks,
+                    strategy.account,
+                    strategy.pkey,
+                );
+                console.log({rebalanceTxHash})
+                // wait for transaction confirmation
+                await web3Lib.waitForConfirmation(strategy.networkDetails.web3Object, rebalanceTxHash);
+
+                // remake query with new ranges and set type of "ack"
+                liquidity = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/liquidity`);
+                rangesData = await axios.get(`https://api.defiedge.io/${strategy.networkDetails.networkName}/${strategy.id}/ranges`);
+        
+                strategyTicks = rangesData.data.orders.map(ticks => ({ 
+                    tickLower: Number(ticks.tickLower),
+                    tickUpper: Number(ticks.tickUpper),
+                    amount0: new bn(ticks.amount0.hex).dividedBy(strategy.DEC_STR0).toNumber(0),
+                    amount1: new bn(ticks.amount1.hex).dividedBy(strategy.DEC_STR1).toNumber(0)
+                }));
+        
+                query = {
+                    "type": "ack",
+                    "strategy_id": strategy.id,
+                    "amount0": liquidity.data.amount0Total, // total token 0
+                    "amount1": liquidity.data.amount1Total, // total token 1
+                    "liquidation_date": strategy.liquidation_date,
+                    "tick": rangesData.data.currentPrice.tick, //current tick
+                    "ranges": strategyTicks
+                }
+                console.log({query})
+                response = await axios.request({
+                    method: 'get',
+                    url: 'http://178.128.114.22/',
+                    headers: { 
+                    'Content-Type': 'application/json'
+                    },
+                    data : JSON.stringify(query)
+                });
+                console.log(JSON.stringify(response.data[0], null, 4))
+                // log response
+                fs.appendFile('./logs/alologs.txt', JSON.stringify(response.data[0], null, 4) + ",\n\n", (err) => { });
+            }
+        } catch(e){
+            console.log("error while run", e.toString());
+            let info_str;
+            try { info_str = JSON.stringify({ "strategy": strategy.id }); }
+            catch { info_str = ""; }
+            fs.appendFile('./logs/aloerrors.txt', Date.now() + " - error while run: " + e.toString() + ",\n" + info_str + "\n", (err) => { });
         }
         
     }
