@@ -127,10 +127,10 @@ async function run() {
             }
             // console.log(query)
 
-            // make json query to strategyAPI at http://178.128.114.22
+            // make json query to strategyAPI at http://178.128.114.22 OR http://178.128.114.22:8052
             response = await axios.request({
                 method: 'get',
-                url: 'http://178.128.114.22/',
+                url: 'http://localhost:8052',
                 headers: { 
                 'Content-Type': 'application/json'
                 },
