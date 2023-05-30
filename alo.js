@@ -20,9 +20,17 @@ const ARBITRUM_NETWORK_DETAILS = {
     web3Object: undefined
 };
 
+const POLYGON_NETWORK_DETAILS = {
+    networkName: "Polygon",
+    networkRPC: "https://polygon-rpc.com", 
+    chainId: 137, 
+    web3Object: undefined
+}
+
 
 OPTIMISM_NETWORK_DETAILS.web3Object = new Web3(new Web3.providers.HttpProvider(OPTIMISM_NETWORK_DETAILS.networkRPC));
 ARBITRUM_NETWORK_DETAILS.web3Object = new Web3(new Web3.providers.HttpProvider(ARBITRUM_NETWORK_DETAILS.networkRPC));
+POLYGON_NETWORK_DETAILS.web3Object = new Web3(new Web3.providers.HttpProvider(POLYGON_NETWORK_DETAILS.networkRPC))
 
 const ETHSNX = {
     id: "0x9a42f5bd1397b142e3ebc0d29ef50ac7ec22b8f0",
@@ -46,9 +54,45 @@ const ETHVSTA = {
     pkey: Buffer.from(process.env.ALO_PKEY_2, 'hex') // strategy manager address key
 } 
 
+const ETHUSDCARB = {
+    id: "0xca57b794942de3dfb975f689b8108d326b503e24", 
+    poolAddress: "0xc31e54c7a869b9fcbecc14363cf510d1c41fa443",
+    liquidation_date: null,
+    DEC_STR0: "1000000000000000000", // 18
+    DEC_STR1: "1000000", // 6
+    networkDetails: ARBITRUM_NETWORK_DETAILS, 
+    account: process.env.BCALO_ETH_USDC_ARB_ADDR,
+    pkey: Buffer.from(process.env.BCALO_ETH_USDC_ARB_PKEY, 'hex')
+}
+
+const MATICETHPOLY = {
+    id: "0xb3cbbd72117722bfac2506c1af8d61f24e7c5826", 
+    poolAddress: "0x86f1d8390222a3691c28938ec7404a1661e618e0",
+    liquidation_date: null,
+    DEC_STR0: "1000000000000000000", // 18
+    DEC_STR1: "1000000000000000000", // 18
+    networkDetails: POLYGON_NETWORK_DETAILS,
+    account: process.env.BCALO_MATIC_ETH_POLY_ADDR,
+    pkey: Buffer.from(process.env.BCALO_MATIC_ETH_POLY_PKEY, 'hex')
+}
+
+const LINKETHPOLY = {
+    id: "0xc79f5e8804b57eff9b26c5ad2c40cd837d53dad6", 
+    poolAddress: "0x3e31ab7f37c048fc6574189135d108df80f0ea26", 
+    liquidation_date: null, 
+    DEC_STR0: "1000000000000000000", // 18
+    DEC_STR1: "1000000000000000000", // 18
+    networkDetails: POLYGON_NETWORK_DETAILS,
+    account: process.env.BCALO_LINK_ETH_POLY_ADDR,
+    pkey: Buffer.from(process.env.BCALO_LINK_ETH_POLY_PKEY, 'hex')
+}
+
 var strategies = [
     ETHSNX, 
-    ETHVSTA
+    ETHVSTA,
+    ETHUSDCARB, 
+    MATICETHPOLY, 
+    LINKETHPOLY
 ]
 
 function get_new_ticks(ranges, DEC_STR0, DEC_STR1) {
@@ -97,8 +141,8 @@ async function init(){
         strategy['strategyInstance'] = new strategy.networkDetails.web3Object.eth.Contract(ABI.DEFIEDGE_STRATEGY_ABI, strategy.id)
     }
 
-    // run every 90 seconds
-    setInterval(run, 90000);
+    // run every 5 minutes
+    setInterval(run, 300000);
 }
 
 // run every 10-15 minutes
