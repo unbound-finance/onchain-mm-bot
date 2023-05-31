@@ -21,7 +21,7 @@ const ARBITRUM_NETWORK_DETAILS = {
 };
 
 const POLYGON_NETWORK_DETAILS = {
-    networkName: "Polygon",
+    networkName: "polygon",
     networkRPC: "https://polygon-rpc.com", 
     chainId: 137, 
     web3Object: undefined
