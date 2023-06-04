@@ -141,8 +141,8 @@ async function init(){
         strategy['strategyInstance'] = new strategy.networkDetails.web3Object.eth.Contract(ABI.DEFIEDGE_STRATEGY_ABI, strategy.id)
     }
 
-    // run every 5 minutes
-    setInterval(run, 300000);
+    // run every 15 minutes - 5 secs
+    setInterval(run, 895000);
 }
 
 // run every 10-15 minutes
